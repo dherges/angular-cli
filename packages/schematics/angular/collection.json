@@ -30,6 +30,12 @@
       "description": "Create an Angular e2e application.",
       "hidden": true
     },
+    "element": {
+      "factory": "./element",
+      "schema": "./element/schema.json",
+      "description": "Create an Angular element, exported as web component.",
+      "hidden": true
+    },
     "class": {
       "aliases": [ "cl" ],
       "factory": "./class",

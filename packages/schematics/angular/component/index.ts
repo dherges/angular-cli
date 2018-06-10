@@ -113,7 +113,7 @@ function addDeclarationToNgModule(options: ComponentOptions): Rule {
 }
 
 
-function buildSelector(options: ComponentOptions, projectPrefix: string) {
+export function buildSelector(options: ComponentOptions, projectPrefix: string) {
   let selector = strings.dasherize(options.name);
   if (options.prefix) {
     selector = `${options.prefix}-${selector}`;

@@ -162,14 +162,19 @@ export function generateFixture(outDir: string, options: FixtureOptions): number
     exportsMap[`./${entryKey(relDir)}`] = `./${relDir.split(path.sep).join('/')}/public-api.ts`;
   }
 
-  const angularCoreVersion = JSON.parse(
-    fs.readFileSync(
-      new URL('../../../node_modules/@angular/core/package.json', import.meta.url),
-      'utf8',
-    ),
-  ).version as string;
-  // e.g. "22.3.0-next.0" -> "22.3.0-next" (drop the trailing prerelease build number only).
-  const peerRange = `^${angularCoreVersion.replace(/\.\d+$/, '')}`;
+  // Fallback to a hardcoded version if the path lookup fails in the sandbox/environment.
+  let peerRange = '^22.0.0';
+  try {
+    const angularCoreVersion = JSON.parse(
+      fs.readFileSync(
+        new URL('../../../node_modules/@angular/core/package.json', import.meta.url),
+        'utf8',
+      ),
+    ).version as string;
+    peerRange = `^${angularCoreVersion.replace(/\.\d+$/, '')}`;
+  } catch {
+    // Ignore error, use fallback
+  }
 
   fs.writeFileSync(
     path.join(outDir, 'package.json'),

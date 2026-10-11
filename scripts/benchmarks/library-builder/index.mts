@@ -16,10 +16,13 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { type FixtureOptions, type Layout, type Style, generateFixture } from './fixtures.mts';
+
+const require = createRequire(import.meta.url);
 
 export interface LibraryBuilderBenchmarkOptions {
   layout?: Layout;
@@ -58,7 +61,7 @@ function checkBuilderIsBuilt(
   if (!fs.existsSync(path.join(buildPkg, 'package.json')) || !fs.existsSync(architectCli)) {
     logger.error(
       'Error: @angular/build and/or @angular-devkit/architect have not been built yet.\n' +
-      'Run "pnpm build" (or "pnpm admin build --local" for a faster local build) first.',
+        'Run "pnpm build" (or "pnpm admin build --local" for a faster local build) first.',
     );
 
     return undefined;
@@ -112,7 +115,7 @@ function ensureBuilderDepsLinkedAtRepoRoot(
       seen.add(dep);
       queue.push(dep);
       if (!fs.existsSync(path.join(rootNodeModules, dep))) {
-        linkFromPnpmStore(logger, dep);
+        linkDependency(logger, dep);
       }
     }
   }
@@ -122,12 +125,14 @@ function linkIfMissing(name: string, target: string): void {
   const linkPath = path.join(rootNodeModules, name);
   try {
     const stat = fs.lstatSync(linkPath);
-    if (stat.isSymbolicLink() && !fs.existsSync(linkPath)) {
-      // Remove broken symlink to avoid EEXIST error on recreation
+    if (stat.isSymbolicLink()) {
+      const resolvedTarget = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+      if (resolvedTarget === path.resolve(target)) {
+        return;
+      }
       fs.unlinkSync(linkPath);
     } else {
-      // Symlink already exists and is valid
-      return;
+      fs.rmSync(linkPath, { recursive: true, force: true });
     }
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
@@ -137,25 +142,31 @@ function linkIfMissing(name: string, target: string): void {
   fs.symlinkSync(target, linkPath, 'dir');
 }
 
-/** Resolves `dep` (e.g. "rxjs" or "@angular-devkit/core") to its pnpm store dir and symlinks it. */
-function linkFromPnpmStore(logger: Console, dep: string): void {
-  const storeName = dep.startsWith('@') ? dep.replace('/', '+') : dep;
-  const candidates = fs.existsSync(pnpmStore)
-    ? fs.readdirSync(pnpmStore).filter((entry) => entry.startsWith(`${storeName}@`))
-    : [];
-  if (candidates.length === 0) {
-    logger.warn(`Warning: could not resolve "${dep}" from the pnpm store; it may be missing.`);
+/** Resolves "dep" (e.g. "rxjs" or "@angular-devkit/core") to its physical location and symlinks it. */
+function linkDependency(logger: Console, dep: string): void {
+  try {
+    const searchPaths = [
+      path.join(repoRoot, 'packages/angular/build'),
+      path.join(repoRoot, 'packages/angular_devkit/architect'),
+    ];
+    const resolved = require.resolve(dep, { paths: searchPaths });
+    const realPath = fs.realpathSync(resolved);
 
-    return;
+    let target = path.dirname(realPath);
+    while (target !== repoRoot && target !== path.dirname(target)) {
+      if (fs.existsSync(path.join(target, 'package.json'))) {
+        break;
+      }
+      target = path.dirname(target);
+    }
+
+    if (dep.includes('/')) {
+      fs.mkdirSync(path.join(rootNodeModules, path.dirname(dep)), { recursive: true });
+    }
+    linkIfMissing(dep, target);
+  } catch (err) {
+    logger.warn('Warning: could not resolve "' + dep + '" via require.resolve; it may be missing.');
   }
-  // Prefer the lexically-last match (newest version) when more than one is installed.
-  candidates.sort();
-  const storeDir = candidates[candidates.length - 1];
-  const target = path.join(pnpmStore, storeDir, 'node_modules', dep);
-  if (dep.includes('/')) {
-    fs.mkdirSync(path.join(rootNodeModules, path.dirname(dep)), { recursive: true });
-  }
-  linkIfMissing(dep, target);
 }
 
 function buildOnce(
@@ -213,7 +224,8 @@ export async function runLibraryBuilderBenchmarks(
 
   try {
     for (const sizeOrDepth of sizes) {
-      const label = layout + "-" + style + "-" + (layout === "deep" ? "depth" + sizeOrDepth : sizeOrDepth);
+      const label =
+        layout + '-' + style + '-' + (layout === 'deep' ? 'depth' + sizeOrDepth : sizeOrDepth);
       const projectDir = path.join(scratchRoot, label);
 
       const fixtureOptions: FixtureOptions =
@@ -224,7 +236,7 @@ export async function runLibraryBuilderBenchmarks(
 
       if (!options.json) {
         // eslint-disable-next-line no-console
-        console.log("\n[library-builder] " + label + " (" + entryPoints + " entry points)");
+        console.log('\n[library-builder] ' + label + ' (' + entryPoints + ' entry points)');
       }
 
       const durations: number[] = [];
@@ -233,7 +245,15 @@ export async function runLibraryBuilderBenchmarks(
         if (!options.json) {
           // eslint-disable-next-line no-console
           console.log(
-            "  run " + i + "/" + iterations + ": " + (status === 'ok' ? 'done' : 'FAILED') + " in " + (durationMs / 1000).toFixed(2) + "s"
+            '  run ' +
+              i +
+              '/' +
+              iterations +
+              ': ' +
+              (status === 'ok' ? 'done' : 'FAILED') +
+              ' in ' +
+              (durationMs / 1000).toFixed(2) +
+              's',
           );
         }
         if (status === 'ok') {
@@ -246,7 +266,11 @@ export async function runLibraryBuilderBenchmarks(
         const medianMs = median(durations);
         // eslint-disable-next-line no-console
         console.log(
-          "  median: " + (medianMs / 1000).toFixed(2) + "s  (" + (medianMs / entryPoints).toFixed(2) + "ms/entry)"
+          '  median: ' +
+            (medianMs / 1000).toFixed(2) +
+            's  (' +
+            (medianMs / entryPoints).toFixed(2) +
+            'ms/entry)',
         );
       }
 

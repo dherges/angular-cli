@@ -41,9 +41,13 @@ function buildComponentSource(
     metadataLines.push(`  templateUrl: './${compBase}.component.html',`);
     metadataLines.push(`  styleUrls: ['./${compBase}.component.scss'],`);
   } else {
-    metadataLines.push(`  template: '<div class="ref-comp">Reference component ${id}</div>',`);
+    metadataLines.push(
+      `  template: '<div class="ref-comp-${id}">Reference component ${id}</div>',`,
+    );
     if (style === 'inline-scss') {
-      metadataLines.push(`  styles: ['.ref-comp { display: block; padding: 4px; }'],`);
+      metadataLines.push(
+        `  styles: ['.ref-comp-${id} { display: block; padding: 4px; } :host { --local-cache-buster: "${id}";}'],`,
+      );
     }
   }
 
@@ -72,11 +76,11 @@ function writeEntryPointSource(entryDir: string, id: string, style: Style): void
   if (style === 'external') {
     fs.writeFileSync(
       path.join(entryDir, `${compBase}.component.html`),
-      `<div class="ref-comp">Reference component ${id}</div>\n`,
+      `<div class="ref-comp-${id}">Reference component ${id}</div>\n`,
     );
     fs.writeFileSync(
       path.join(entryDir, `${compBase}.component.scss`),
-      `.ref-comp {\n  display: block;\n  padding: 4px;\n}\n`,
+      `.ref-comp-${id} {\n  display: block;\n  padding: 4px;\n}\n\n:host {\n  --local-cache-buster: "${id}";\n}`,
     );
   }
 
@@ -161,8 +165,8 @@ export function generateFixture(outDir: string, options: FixtureOptions): number
   const angularCoreVersion = JSON.parse(
     fs.readFileSync(
       new URL('../../../node_modules/@angular/core/package.json', import.meta.url),
-      'utf8'
-    )
+      'utf8',
+    ),
   ).version as string;
   // e.g. "22.3.0-next.0" -> "22.3.0-next" (drop the trailing prerelease build number only).
   const peerRange = `^${angularCoreVersion.replace(/\.\d+$/, '')}`;

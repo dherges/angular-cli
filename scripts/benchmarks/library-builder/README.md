@@ -54,7 +54,7 @@ pnpm admin benchmark library-builder [options]
 | `--layout=<flat\|deep>`                   | Fixture layout                        | `flat`   |
 | `--style=<inline\|inline-scss\|external>` | Component style variant               | `inline` |
 | `--count=<n>`                             | Entry-point count (for `layout=flat`) | `10`     |
-| `--deep=<n>`                              | Tree depth (for `layout=deep`)        | `2`      |
+| `--depth=<n>`                             | Tree depth (for `layout=deep`)        | `2`      |
 | `--iterations=<n>`                        | Measured iterations per size          | `2`      |
 | `--json`                                  | Output raw measurements as JSON       | N/A      |
 
@@ -65,3 +65,74 @@ Sweep the external-style variant using the flat layout with 500 entry points:
 ```sh
 pnpm admin benchmark library-builder --layout=flat --count=500 --style=external
 ```
+
+---
+
+NOTES taking:
+
+- scaling benchmark ... count for flat, depth for deep
+- run all counts measure results, rount all depths measure results
+- library "taste" is one of:
+  - flat <n>
+  - deep <n>
+  - flat <n> with dependencies / out of scope
+  - deep <n> with dependencies / out of scope
+  - flat-n-dependencies-shared-scss / out scope
+  - deep-n-dependencies-shared-scss / out of scope
+  - flat-n-shared-scss / out of scope
+  - deep-n-shared-scss / out of scope
+- component "flavour" is the combos of:
+  - inline
+  - inline-css
+  - inline-scss
+  - external
+  - external-css
+  - external-scss
+
+==> measurements always run along n... in flat n=200 is component, in deep n=200 it coud be 2^8 depths, cutting off after 200 (so the depths is erived from `2^depth >= n`)
+==> sweep rounds need to be like 10, 20, 50, 100, 200, 300, 400, 500, 1000, 2000 --> an array of n
+
+running the benchmarks iterations i=1..3 is like build this library 3 times, measure all 3 rounds
+sweep=[n, ..., n] is the number of rounds n
+
+we could say:
+the pnpm admin benchmark only takes the scenario and sweeps parameters
+-> it will always generate the 6 different "component" tastes as shown below
+-> this is a rather mechnical multiplication of the theoretical combinations (out-scoping the interesting dependencies between entry points, and out-scoping the shared stylesheets token)
+-> it should take also an argment for the builder to test: `'library'|'ng-packagr'`
+
+1st iteration:
+
+- flat and deep with <n>
+- only inline (html template only)
+
+2nd iteration:
+
+- flat and deep with <n>
+- inline-css (pure css only, bursting the cache)
+
+3rd iteration:
+
+- flat and deep with <n>
+- inline-scss (scss only, bursting the cache)
+
+4th iteration:
+
+- flat and deep with <n>
+- external (external html template file)
+
+5th iteration:
+
+- flat and deep with <n>
+- external-css (pure css file, bursting the cache)
+
+6th iteration:
+
+- flat and deep with <n>
+- external-scss (scss file, bursting the cache)
+
+## Future Work
+
+- Dependencies between entry points
+- Shared stylesheet tokens imported by multiple component
+- Watch mode

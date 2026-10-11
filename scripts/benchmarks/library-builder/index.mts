@@ -8,31 +8,18 @@
 
 // Benchmarks `@angular/build:library`'s cold build time across a sweep of library sizes.
 //
-// Context: a comparison against ng-packagr (a third-party APF build tool) found that its
-// per-entry-point build cost grows super-linearly past roughly 300-500 secondary entry points.
-// This suite exists to check whether `@angular/build:library` -- a from-scratch build pipeline,
-// unrelated to ng-packagr's implementation -- shows the same growth on equivalent fixtures.
-// See scripts/benchmarks/library-builder/README.md for the full methodology and findings.
 
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { type FixtureOptions, type Layout, type Style, generateFixture } from './fixtures.mts';
-
-const require = createRequire(import.meta.url);
 
 export interface LibraryBuilderBenchmarkOptions {
   layout?: Layout;
   style?: Style;
-
-  /** Comma-separated entry-point counts, for `layout: 'flat'`. */
-  sizes?: number[];
-
-  /** Comma-separated tree depths, for `layout: 'deep'`. */
-  depths?: number[];
+  count?: number[];
+  depth?: number[];
   iterations?: number;
   json?: boolean;
 }
@@ -47,9 +34,7 @@ export interface BuildMeasurement {
 }
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
-const scratchRoot = path.join(repoRoot, 'dist', '.library-builder-benchmark-tmp');
-const rootNodeModules = path.join(repoRoot, 'node_modules');
-const pnpmStore = path.join(rootNodeModules, '.pnpm');
+const scratchRoot = path.join(repoRoot, 'dist', '.library-benchmark-fixtures');
 
 function checkBuilderIsBuilt(
   logger: Console,
@@ -70,110 +55,19 @@ function checkBuilderIsBuilt(
   return { buildPkg, architectPkg, architectCli };
 }
 
-/**
- * `@angular/build` and `@angular-devkit/architect` are Bazel-built workspace packages, not
- * ordinary npm dependencies -- a plain `pnpm install` never links them (or their own
- * dependencies) into the root node_modules. Resolving a plain `require('@angular/build')`
- * from anywhere therefore needs these links to exist at least once, at the repo root (Node's
- * module resolution walks up from each required file's real, on-disk location, so per-fixture
- * symlinks are not enough once a dependency itself does a bare `require`).
- *
- * This walks the dependency graph starting at `@angular/build` and `@angular-devkit/architect`
- * and links any package missing from node_modules, resolving each from the pnpm store so it
- * doesn't go stale if a dependency version changes.
- */
-function ensureBuilderDepsLinkedAtRepoRoot(
-  logger: Console,
-  { buildPkg, architectPkg }: { buildPkg: string; architectPkg: string },
-): void {
-  fs.mkdirSync(path.join(rootNodeModules, '@angular'), { recursive: true });
-  fs.mkdirSync(path.join(rootNodeModules, '@angular-devkit'), { recursive: true });
-  linkIfMissing('@angular/build', buildPkg);
-  linkIfMissing('@angular-devkit/architect', architectPkg);
-
-  const seen = new Set<string>(['@angular/build', '@angular-devkit/architect']);
-  const queue: string[] = ['@angular/build', '@angular-devkit/architect'];
-  while (queue.length > 0) {
-    const pkgName = queue.shift();
-    if (pkgName === undefined) {
-      break;
-    }
-    const pkgJsonPath = path.join(rootNodeModules, pkgName, 'package.json');
-    if (!fs.existsSync(pkgJsonPath)) {
-      continue;
-    }
-    const deps = Object.keys(
-      (JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')).dependencies ?? {}) as Record<
-        string,
-        string
-      >,
-    );
-    for (const dep of deps) {
-      if (seen.has(dep)) {
-        continue;
-      }
-      seen.add(dep);
-      queue.push(dep);
-      if (!fs.existsSync(path.join(rootNodeModules, dep))) {
-        linkDependency(logger, dep);
-      }
-    }
-  }
-}
-
-function linkIfMissing(name: string, target: string): void {
-  const linkPath = path.join(rootNodeModules, name);
-  try {
-    const stat = fs.lstatSync(linkPath);
-    if (stat.isSymbolicLink()) {
-      const resolvedTarget = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
-      if (resolvedTarget === path.resolve(target)) {
-        return;
-      }
-      fs.unlinkSync(linkPath);
-    } else {
-      fs.rmSync(linkPath, { recursive: true, force: true });
-    }
-  } catch (e: any) {
-    if (e.code !== 'ENOENT') {
-      throw e;
-    }
-  }
-  fs.symlinkSync(target, linkPath, 'dir');
-}
-
-/** Resolves "dep" (e.g. "rxjs" or "@angular-devkit/core") to its physical location and symlinks it. */
-function linkDependency(logger: Console, dep: string): void {
-  try {
-    const searchPaths = [
-      path.join(repoRoot, 'packages/angular/build'),
-      path.join(repoRoot, 'packages/angular_devkit/architect'),
-    ];
-    const resolved = require.resolve(dep, { paths: searchPaths });
-    const realPath = fs.realpathSync(resolved);
-
-    let target = path.dirname(realPath);
-    while (target !== repoRoot && target !== path.dirname(target)) {
-      if (fs.existsSync(path.join(target, 'package.json'))) {
-        break;
-      }
-      target = path.dirname(target);
-    }
-
-    if (dep.includes('/')) {
-      fs.mkdirSync(path.join(rootNodeModules, path.dirname(dep)), { recursive: true });
-    }
-    linkIfMissing(dep, target);
-  } catch (err) {
-    logger.warn('Warning: could not resolve "' + dep + '" via require.resolve; it may be missing.');
-  }
-}
-
 function buildOnce(
   projectDir: string,
   architectCli: string,
 ): { durationMs: number; status: 'ok' | 'fail' } {
+  // XX... skipped for debugging
+  return { durationMs: 0, status: 'fail' };
+
+  /*
   const start = performance.now();
+  // "@angular/build:library"
+  // "@angular/build:ng-packagr"
+  // "@angular-devkit/build-angular:ng-packagr"
+
   const result = spawnSync(process.execPath, [architectCli, 'lib:build'], {
     cwd: projectDir,
     stdio: 'pipe',
@@ -193,6 +87,7 @@ function buildOnce(
   }
 
   return { durationMs, status };
+  */
 }
 
 function median(values: number[]): number {
@@ -209,15 +104,16 @@ export async function runLibraryBuilderBenchmarks(
   if (!builder) {
     return { measurements: [], exitCode: 1 };
   }
-  ensureBuilderDepsLinkedAtRepoRoot(console, builder);
+  // XX disabled for now as it is not working in the CI environment. The builder is already built at this point, so this should not be necessary.
+  // ensureBuilderDepsLinkedAtRepoRoot(console, builder);
 
   const layout = options.layout ?? 'flat';
   const style = options.style ?? 'inline';
-  const iterations = options.iterations ?? 2;
+  const iterations = options.iterations ?? 3;
   const sizes =
     layout === 'flat'
-      ? (options.sizes ?? [10, 50, 300, 1000, 2000])
-      : (options.depths ?? [2, 5, 8, 11]);
+      ? (options.count ?? [10, 50, 300, 1000, 2000])
+      : (options.depth ?? [2, 5, 8, 11]);
 
   fs.mkdirSync(scratchRoot, { recursive: true });
   const measurements: BuildMeasurement[] = [];
@@ -274,10 +170,12 @@ export async function runLibraryBuilderBenchmarks(
         );
       }
 
-      fs.rmSync(projectDir, { recursive: true, force: true });
+      // XX disabled for fixture analysis
+      // fs.rmSync(projectDir, { recursive: true, force: true });
     }
   } finally {
-    fs.rmSync(scratchRoot, { recursive: true, force: true });
+    // XX disabled for fixture analysis
+    // fs.rmSync(scratchRoot, { recursive: true, force: true });
   }
 
   const anyFailed = measurements.some((m) => m.status === 'fail');

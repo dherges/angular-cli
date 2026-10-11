@@ -32,7 +32,7 @@ function checkBuildStatus(logger: Console): boolean {
     if (srcMtime > distMtime) {
       logger.warn(
         'Warning: Source files in packages/angular/build are newer than dist/.\n' +
-        'Run "pnpm build" to ensure your benchmark reflects your latest local edits.\n',
+          'Run "pnpm build" to ensure your benchmark reflects your latest local edits.\n',
       );
     }
   }
@@ -44,7 +44,9 @@ function parseIntList(raw: string | number | undefined): number[] | undefined {
   if (raw === undefined) {
     return undefined;
   }
-  return String(raw).split(',').map((s) => Number(s.trim()));
+  return String(raw)
+    .split(',')
+    .map((s) => Number(s.trim()));
 }
 
 async function runLibraryBuilderSubsystem(options: {
@@ -57,7 +59,7 @@ async function runLibraryBuilderSubsystem(options: {
 }): Promise<number> {
   if (options.layout !== undefined && options.layout !== 'flat' && options.layout !== 'deep') {
     // eslint-disable-next-line no-console
-    console.error("Error: --layout must be \"flat\" or \"deep\", got \"" + options.layout + "\".");
+    console.error('Error: --layout must be "flat" or "deep", got "' + options.layout + '".');
 
     return 1;
   }
@@ -67,7 +69,9 @@ async function runLibraryBuilderSubsystem(options: {
   ) {
     // eslint-disable-next-line no-console
     console.error(
-      "Error: --style must be one of \"inline\", \"inline-scss\", \"external\", got \"" + options.style + "\"."
+      'Error: --style must be one of "inline", "inline-scss", "external", got "' +
+        options.style +
+        '".',
     );
 
     return 1;
@@ -76,7 +80,11 @@ async function runLibraryBuilderSubsystem(options: {
   const sizes = parseIntList(options.sizes);
   if (sizes !== undefined && sizes.some((n) => !Number.isInteger(n) || n < 1)) {
     // eslint-disable-next-line no-console
-    console.error("Error: --sizes must be a comma-separated list of positive integers, got \"" + options.sizes + "\".");
+    console.error(
+      'Error: --sizes must be a comma-separated list of positive integers, got "' +
+        options.sizes +
+        '".',
+    );
 
     return 1;
   }
@@ -84,7 +92,11 @@ async function runLibraryBuilderSubsystem(options: {
   const depths = parseIntList(options.depths);
   if (depths !== undefined && depths.some((n) => !Number.isInteger(n) || n < 1)) {
     // eslint-disable-next-line no-console
-    console.error("Error: --depths must be a comma-separated list of positive integers, got \"" + options.depths + "\".");
+    console.error(
+      'Error: --depths must be a comma-separated list of positive integers, got "' +
+        options.depths +
+        '".',
+    );
 
     return 1;
   }
@@ -92,7 +104,9 @@ async function runLibraryBuilderSubsystem(options: {
   const iterations = options.iterations !== undefined ? Number(options.iterations) : undefined;
   if (iterations !== undefined && (!Number.isInteger(iterations) || iterations < 1)) {
     // eslint-disable-next-line no-console
-    console.error("Error: --iterations must be a positive integer, got \"" + options.iterations + "\".");
+    console.error(
+      'Error: --iterations must be a positive integer, got "' + options.iterations + '".',
+    );
 
     return 1;
   }
@@ -163,10 +177,10 @@ Options (i18n):
 
 Options (library-builder):
   --layout=<flat|deep>       Fixture layout (default: flat)
-  --style=<inline|inline-scss|external>  Component style variant (default: inline)
-  --sizes=<n,n,...>          Entry-point counts to sweep, layout=flat only (default: 10,50,300,1000,2000)
-  --depths=<n,n,...>         Tree depths to sweep, layout=deep only (default: 2,5,8,11)
-  --iterations=<n>           Measured iterations per size (default: 2)
+  --style=<inline>           Component style variant (default: inline)
+  --count=<n,n,...>          Entry-point counts, layout=flat only (default: 10,50,300,1000,2000)
+  --depth=<n,n,...>          Tree depths, layout=deep only (default: 2,5,8,11)
+  --iterations=<n>           Measured iterations (default: 3)
   --json                     Output raw measurements as JSON
 
   --help                     Show this help message
